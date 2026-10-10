@@ -15,7 +15,9 @@ model-serving = "model_serving:main"
 
 [project.optional-dependencies]
 mlflow = [
-    "mlflow~=3.17.0",
+    "mlflow-skinny~=3.17.0",
+    "pandas>=3.0.6",
+    "skops>=0.16.0",
 ]
 
 [build-system]
