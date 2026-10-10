@@ -34,6 +34,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      tag: ${{ steps.versioning.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -67,23 +69,27 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  promote:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Lightweight runner for git ops: fast startup, no ARM64 needed.
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout GitOps repo (roamflow/devops)
         uses: actions/checkout@v4
         with:
           repository: roamflow/devops
           ssh-key: ${{ secrets.DEVOPS_DEPLOY_KEY }}
-          path: devops-repo
           ref: main
 
       - name: Promote image tag to GitOps repo
         run: |
-          NEW_TAG="${{ steps.versioning.outputs.tag }}"
-          VALUES_FILE="devops-repo/apps/model-serving/values.yaml"
+          NEW_TAG="${{ needs.build.outputs.tag }}"
+          VALUES_FILE="apps/model-serving/values.yaml"
           echo "Promoting image tag to: ${NEW_TAG}"
 
           sed -i -E "s|tag: \".*\"|tag: \"${NEW_TAG}\"|" "$VALUES_FILE"
 
-          cd devops-repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -93,6 +99,5 @@ jobs:
             git add apps/model-serving/values.yaml
             git commit -m "chore(model-serving): bump image tag to ${NEW_TAG} [skip ci]"
             git push origin main
-            echo "Successfully pushed tag ${NEW_TAG} to roamflow/devops!"
+            echo "Successfully promoted tag ${NEW_TAG} to roamflow/devops!"
           fi
-
