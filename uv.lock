@@ -1533,9 +1533,13 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "mlflow" },
     { name = "scikit-learn" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+mlflow = [
+    { name = "mlflow" },
 ]
 
 [package.dev-dependencies]
@@ -1548,10 +1552,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.143.0" },
-    { name = "mlflow", specifier = ">=3.17.0" },
+    { name = "mlflow", marker = "extra == 'mlflow'", specifier = "~=3.17.0" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
+provides-extras = ["mlflow"]
 
 [package.metadata.requires-dev]
 dev = [

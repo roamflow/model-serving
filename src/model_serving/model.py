@@ -26,7 +26,13 @@ def load_model() -> BaseEstimator:
         return _train_fallback_model()
 
     # Imported lazily: mlflow is heavy (seconds of import time, 100s of MB),
-    # and the fallback path does not need it.
-    import mlflow.sklearn
+    # so it is an optional extra: `uv sync --extra mlflow`.
+    try:
+        import mlflow.sklearn
+    except ImportError as exc:
+        raise RuntimeError(
+            "MODEL_URI is set but mlflow is not installed; "
+            "install it with the 'mlflow' extra (uv sync --extra mlflow)"
+        ) from exc
 
     return mlflow.sklearn.load_model(model_uri)

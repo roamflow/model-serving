@@ -6,13 +6,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.143.0",
-    "mlflow>=3.17.0",
     "scikit-learn>=1.9.1",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [project.scripts]
 model-serving = "model_serving:main"
+
+[project.optional-dependencies]
+mlflow = [
+    "mlflow~=3.17.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
