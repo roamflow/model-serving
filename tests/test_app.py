@@ -62,3 +62,15 @@ def test_not_ready_before_startup():
     assert c.get("/health").status_code == 200  # liveness unaffected
     assert c.get("/ready").status_code == 503
     assert c.post("/predict", json={"instances": [[1, 2, 3, 4]]}).status_code == 503
+
+
+def test_metrics_endpoint(client):
+    client.post("/predict", json={"instances": [[5.1, 3.5, 1.4, 0.2]]})
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    content = r.text
+    assert "model_serving_requests_total" in content
+    assert "model_serving_request_duration_seconds" in content
+    assert "model_serving_inference_duration_seconds" in content
+    assert "model_serving_predictions_total" in content
+    assert "model_serving_model_info" in content
