@@ -1,6 +1,7 @@
 """FastAPI app: /health (liveness), /ready (readiness), /predict."""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -41,11 +42,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="model-serving", lifespan=lifespan)
 
 
+APP_VERSION = os.getenv("APP_VERSION", "dev")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Liveness: the process is up. Must not depend on the model or other
     services, otherwise a slow dependency makes Kubernetes restart the pod."""
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 
 @app.get("/ready")

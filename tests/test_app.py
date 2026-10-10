@@ -15,7 +15,9 @@ def client():
 def test_health_is_ok(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    data = r.json()
+    assert data["status"] == "ok"
+    assert "version" in data
 
 
 def test_ready_once_model_loaded(client):
