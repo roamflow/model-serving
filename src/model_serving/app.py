@@ -3,8 +3,10 @@
 import logging
 import os
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 
+import numpy as np
 from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -14,12 +16,15 @@ from prometheus_client import (
     generate_latest,
 )
 from pydantic import BaseModel, Field
+from scipy.stats import ks_2samp
+from sklearn.datasets import load_iris
 
 from model_serving.model import load_model
 
 logger = logging.getLogger("model_serving")
 
 N_FEATURES = 4  # iris: sepal/petal length and width
+FEATURE_NAMES = ["sepal_length", "sepal_width", "petal_length", "petal_width"]
 
 # ---- Prometheus Metrics ----
 REQUEST_COUNT = Counter(
@@ -61,6 +66,18 @@ MODEL_INFO = Gauge(
     ["model_name", "model_uri", "app_version"],
 )
 
+FEATURE_DRIFT_P_VALUE = Gauge(
+    "model_serving_feature_drift_p_value",
+    "Two-sample Kolmogorov-Smirnov test p-value comparing serving features against baseline training data (p < 0.05 indicates drift)",
+    ["model_name", "feature"],
+)
+
+FEATURE_DRIFT_DETECTED = Gauge(
+    "model_serving_feature_drift_detected",
+    "1 if feature drift is detected (p_value < 0.05), 0 otherwise",
+    ["model_name", "feature"],
+)
+
 
 class PredictRequest(BaseModel):
     # Pydantic rejects bad shapes/types with HTTP 422 before our code runs.
@@ -95,8 +112,19 @@ async def lifespan(app: FastAPI):
         app_version=APP_VERSION,
     ).set(1)
 
+    # Initialize feature buffer and baseline training data for KS-test drift detection
+    app.state.feature_buffer = deque(maxlen=200)
+    iris = load_iris()
+    app.state.baseline_features = iris.data
+
+    # Set initial p-values against baseline (p = 1.0, drift = 0)
+    for fname in FEATURE_NAMES:
+        FEATURE_DRIFT_P_VALUE.labels(model_name=model_name, feature=fname).set(1.0)
+        FEATURE_DRIFT_DETECTED.labels(model_name=model_name, feature=fname).set(0)
+
     yield
     app.state.model = None
+    app.state.feature_buffer.clear()
 
 
 app = FastAPI(title="model-serving", lifespan=lifespan)
@@ -170,5 +198,24 @@ def predict(body: PredictRequest, request: Request) -> PredictResponse:
             model_name=model_name,
             predicted_class=str(int(p)),
         ).inc()
+
+    # Online data drift monitoring: update feature buffer & compute two-sample KS-test
+    buffer: deque = getattr(request.app.state, "feature_buffer", None)
+    baseline = getattr(request.app.state, "baseline_features", None)
+    if buffer is not None and baseline is not None:
+        for row in body.instances:
+            buffer.append(row)
+        if len(buffer) >= 10:
+            recent = np.array(buffer)
+            for idx, fname in enumerate(FEATURE_NAMES):
+                _, p_val = ks_2samp(baseline[:, idx], recent[:, idx])
+                p_val_rounded = round(float(p_val), 4)
+                is_drifted = 1 if p_val < 0.05 else 0
+                FEATURE_DRIFT_P_VALUE.labels(
+                    model_name=model_name, feature=fname
+                ).set(p_val_rounded)
+                FEATURE_DRIFT_DETECTED.labels(
+                    model_name=model_name, feature=fname
+                ).set(is_drifted)
 
     return PredictResponse(predictions=[int(p) for p in predictions])

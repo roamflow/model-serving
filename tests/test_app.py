@@ -74,3 +74,18 @@ def test_metrics_endpoint(client):
     assert "model_serving_inference_duration_seconds" in content
     assert "model_serving_predictions_total" in content
     assert "model_serving_model_info" in content
+    assert "model_serving_feature_drift_p_value" in content
+    assert "model_serving_feature_drift_detected" in content
+
+
+def test_feature_drift_p_value_calculation(client):
+    # Send at least 10 instances to trigger online KS-test calculation
+    instances = [[5.1, 3.5, 1.4, 0.2] for _ in range(12)]
+    r = client.post("/predict", json={"instances": instances})
+    assert r.status_code == 200
+
+    metrics_res = client.get("/metrics")
+    assert metrics_res.status_code == 200
+    metrics_text = metrics_res.text
+    assert 'feature="sepal_length"' in metrics_text
+    assert 'feature="petal_length"' in metrics_text
